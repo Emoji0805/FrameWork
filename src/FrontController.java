@@ -3,45 +3,33 @@ package controller;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.reflect.Method;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import annotation.*;
+
 import javax.servlet.*;
 import javax.servlet.http.*;
+import Utils.*;
 
 public class FrontController extends HttpServlet {
 
-    private List<String> controllerNames;
-    private List<Class<?>> Listecontroller;
-    private boolean isChecked = false;
+    HashMap<String, Mapping> mapp = new HashMap<>();
 
-    // public void init() throws ServletException {
-    //     String packageToScan = this.getInitParameter("package_name");
+    public void init() throws ServletException{
 
-    //     controllerNames = new ArrayList<>();
-
-    //     try {
-    //         String path = getClass().getClassLoader().getResource(packageToScan.replace('.', '/')).getPath();
-    //         String decodedPath = URLDecoder.decode(path, "UTF-8");
-    //         File packageDir = new File(decodedPath);
-
-    //         File[] files = packageDir.listFiles();
-    //         if (files != null) {
-    //             for (File file : files) {
-    //                 if (file.isFile() && file.getName().endsWith(".class")) {
-    //                     String className = packageToScan + "." + file.getName().replace(".class", "");
-    //                     Class<?> clazz = Class.forName(className);
-    //                     if (clazz.isAnnotationPresent(ControllerAnnotation.class)) {
-    //                         controllerNames.add(clazz.getSimpleName());
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     } catch (IOException | ClassNotFoundException e) {
-    //         e.printStackTrace();
-    //     }
-    // }
+        try{
+            String packageToScan = getInitParameter("package_name");
+            mapp = getListeClasses(packageToScan);
+        }
+        catch(IOException | ClassNotFoundException e){
+            e.printStackTrace();
+        } catch (Exception e) {
+            e.printStackTrace(); 
+        }
+    }
 
     protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         processedRequest(req, res);
@@ -53,50 +41,53 @@ public class FrontController extends HttpServlet {
     }
 
     protected void processedRequest(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-        StringBuffer url = req.getRequestURL();
+        String url = req.getRequestURL().toString();
         PrintWriter out = res.getWriter();
-        out.println("Go london : "+url);
-        
-        if(!this.isChecked){
-          String packageScan=this.getInitParameter("package_name");
-          try{
-               this.Listecontroller=this.getListeControllers(packageScan);
-               this.isChecked=true;
-          }
-          catch (Exception e){
-                e.printStackTrace();
-          }
-        }
-        /* Affichage des Controller */
-        for (Class<?> classs : Listecontroller) {
-            out.println(classs.getName());
+        out.println("Tongasoa ato am FrontController");
+        for(String cle : mapp.keySet()) {
+            if(cle.equals(url)) {
+                out.println("Url : "+url +"\n");
+                out.println("Methode associe : "+mapp.get(cle).getMethodeName());
+                out.println("avec la class : "+mapp.get(cle).getClassName());   
+            }
         }
     }
 
-    boolean isController(Class<?> c) {
-        return c.isAnnotationPresent(ControllerAnnotation.class);
-    }
-    List<Class<?>> getListeControllers(String packageName) throws Exception {
-        List<Class<?>> res=new ArrayList<Class<?>>();
+    
+    public HashMap getListeClasses(String packageName) throws Exception {
         
+        HashMap<String, Mapping> map = new HashMap<>();
+
         //répertoire racine du package
-        String path = this.getClass().getClassLoader().getResource(packageName.replace('.', '/')).getPath();
+        String path = Thread.currentThread().getContextClassLoader().getResource(packageName.replace('.', '/')).getPath();
+
         String decodedPath = URLDecoder.decode(path, "UTF-8");
         File packageDir = new File(decodedPath);
+ 
 
-        // parcourir tous les fichiers dans le répertoire du package
         File[] files = packageDir.listFiles();
         if (files != null) {
             for (File file : files) {
                 if (file.isFile() && file.getName().endsWith(".class")) {
                     String className = packageName + "." + file.getName().replace(".class", "");
                     Class<?> classe = Class.forName(className);
-                    if (isController(classe)) {
-                        res.add(classe);
+                     for (Method method : classe.getDeclaredMethods()) {
+
+                        if (method.isAnnotationPresent(Get.class)) {
+                            Get annotation = method.getAnnotation(Get.class);
+                            String nameClass = classe.getSimpleName();
+                            String annotationName = annotation.value();
+                            String methodeName = method.getName();
+
+                            map.put(annotationName, new Mapping(nameClass, methodeName));
+
+                            System.out.println("Méthode annotée : " + method.getName());
+                            System.out.println("Valeur de l'annotation : " + annotation.value());
+                        }
                     }
                 }
             }
         }
-        return res;
+        return map;
     }
 }
