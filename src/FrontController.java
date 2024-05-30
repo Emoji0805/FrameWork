@@ -43,12 +43,23 @@ public class FrontController extends HttpServlet {
     protected void processedRequest(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         String url = req.getRequestURL().toString();
         PrintWriter out = res.getWriter();
-        out.println("Tongasoa ato am FrontController");
+        out.println("Youhouuu");
         for(String cle : mapp.keySet()) {
             if(cle.equals(url)) {
                 out.println("Url : "+url +"\n");
                 out.println("Methode associe : "+mapp.get(cle).getMethodeName());
-                out.println("avec la class : "+mapp.get(cle).getClassName());   
+                out.println("avec la class : "+mapp.get(cle).getClassName());
+                
+            try{
+                Class<?> clazz = Class.forName(mapp.get(cle).getClassName());
+                Object instance = clazz.getDeclaredConstructor().newInstance();
+                Method method = clazz.getMethod(mapp.get(cle).getMethodeName());
+
+                Object result = method.invoke(instance);
+                out.println("Resultat de l'execution: " + result.toString());
+            } catch(Exception e){
+                e.printStackTrace(out);
+            }
             }
         }
     }
@@ -75,10 +86,10 @@ public class FrontController extends HttpServlet {
 
                         if (method.isAnnotationPresent(Get.class)) {
                             Get annotation = method.getAnnotation(Get.class);
-                            String nameClass = classe.getSimpleName();
+                            String nameClass = classe.getName();
                             String annotationName = annotation.value();
                             String methodeName = method.getName();
-
+]
                             map.put(annotationName, new Mapping(nameClass, methodeName));
 
                             System.out.println("Méthode annotée : " + method.getName());
