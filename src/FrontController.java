@@ -8,9 +8,12 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import javax.rmi.CORBA.Util;
+import javax.rmi.CORBA.Util;
 import annotation.*;
-
+import model.*;
 import javax.servlet.*;
+import javax.servlet.RequestDispatcher;
 import javax.servlet.http.*;
 import Utils.*;
 
@@ -41,25 +44,51 @@ public class FrontController extends HttpServlet {
     }
 
     protected void processedRequest(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-        String url = req.getRequestURL().toString();
+        res.setContentType("text/plain");
+        String url = req.getRequestURI();
         PrintWriter out = res.getWriter();
         out.println("Youhouuu");
+
         for(String cle : mapp.keySet()) {
             if(cle.equals(url)) {
+                out.println("Cle : "+cle+"\n");
                 out.println("Url : "+url +"\n");
-                out.println("Methode associe : "+mapp.get(cle).getMethodeName());
-                out.println("avec la class : "+mapp.get(cle).getClassName());
+                out.println("Methode associe : "+ mapp.get(cle).getMethodeName());
+                out.println("avec la class : "+ mapp.get(cle).getClassName());
                 
-            try{
-                Class<?> clazz = Class.forName(mapp.get(cle).getClassName());
-                Object instance = clazz.getDeclaredConstructor().newInstance();
-                Method method = clazz.getMethod(mapp.get(cle).getMethodeName());
+                try{
+                    
+                    Class<?> clazz = Class.forName(mapp.get(cle).getClassName());
+                    Object instance = clazz.getDeclaredConstructor().newInstance();
+                    Method method = clazz.getMethod(mapp.get(cle).getMethodeName());
 
-                Object result = method.invoke(instance);
-                out.println("Resultat de l'execution: " + result.toString());
-            } catch(Exception e){
-                e.printStackTrace(out);
-            }
+                    Object result = method.invoke(instance);
+
+                    if(result instanceof ModelView){
+                        ModelView mv = (ModelView) result;
+                        String targetUrl = mv.getUrl();
+                        out.println(targetUrl);
+                        RequestDispatcher dispatch = req.getRequestDispatcher(targetUrl);
+                        if (dispatch == null) {
+                            out.println("Erreur: Le dispatcher pour l'URL " + mv.getUrl() + " est null.");
+                            return;
+                        }
+                        HashMap<String, Object> data = mv.getData();
+                        for (String keyData : data.keySet()) {
+                            req.setAttribute(keyData, data.get(keyData));
+                        }
+                        dispatch.forward(req, res);
+                    }
+                    else if (result instanceof String) {
+                        out.println(result.toString());
+                    } else {
+                        out.println("Erreur: Type de retour inconnu");
+                    }
+                    out.println("Resultat de l'execution: " + result.toString());
+
+                } catch(Exception e){
+                    e.printStackTrace(out);
+                }
             }
         }
     }
@@ -69,7 +98,6 @@ public class FrontController extends HttpServlet {
         
         HashMap<String, Mapping> map = new HashMap<>();
 
-        //répertoire racine du package
         String path = Thread.currentThread().getContextClassLoader().getResource(packageName.replace('.', '/')).getPath();
 
         String decodedPath = URLDecoder.decode(path, "UTF-8");
@@ -89,7 +117,6 @@ public class FrontController extends HttpServlet {
                             String nameClass = classe.getName();
                             String annotationName = annotation.value();
                             String methodeName = method.getName();
-]
                             map.put(annotationName, new Mapping(nameClass, methodeName));
 
                             System.out.println("Méthode annotée : " + method.getName());
