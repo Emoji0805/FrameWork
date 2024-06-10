@@ -16,6 +16,7 @@ import javax.servlet.*;
 import javax.servlet.RequestDispatcher;
 import javax.servlet.http.*;
 import Utils.*;
+import annotation.*;
 
 public class FrontController extends HttpServlet {
 
@@ -25,12 +26,15 @@ public class FrontController extends HttpServlet {
 
         try{
             String packageToScan = getInitParameter("package_name");
-            mapp = getListeClasses(packageToScan);
-        }
-        catch(IOException | ClassNotFoundException e){
+            mapp = getListeClasses(packageToScan , ControllerAnnotation.class);
+       
+        } catch (PackageNotFound e) {
             e.printStackTrace();
-        } catch (Exception e) {
+            // throw new ServletException("Le répertoire du package spécifié n'existe pas.", e);
+        }
+        catch (Exception e) {
             e.printStackTrace(); 
+            throw new ServletException(e.getMessage());
         }
     }
 
@@ -49,6 +53,7 @@ public class FrontController extends HttpServlet {
         PrintWriter out = res.getWriter();
         out.println("Youhouuu");
 
+        boolean urlExist = false;
         for(String cle : mapp.keySet()) {
             if(cle.equals(url)) {
                 out.println("Cle : "+cle+"\n");
@@ -66,43 +71,56 @@ public class FrontController extends HttpServlet {
 
                     if(result instanceof ModelView){
                         ModelView mv = (ModelView) result;
-                        String targetUrl = mv.getUrl();
-                        out.println(targetUrl);
-                        RequestDispatcher dispatch = req.getRequestDispatcher(targetUrl);
-                        if (dispatch == null) {
-                            out.println("Erreur: Le dispatcher pour l'URL " + mv.getUrl() + " est null.");
-                            return;
+                        String targetUrl ="pages/" + mv.getUrl();
+                        ServletContext context = getServletContext();
+                        String realPath = context.getRealPath(targetUrl);
+
+                        if (realPath == null || !new File(realPath).exists()) {
+                            throw new ServletException("La page JSP " + targetUrl + " n'existe pas.");
                         }
+                     
                         HashMap<String, Object> data = mv.getData();
                         for (String keyData : data.keySet()) {
                             req.setAttribute(keyData, data.get(keyData));
                         }
+
+                        RequestDispatcher dispatch = req.getRequestDispatcher(targetUrl);
                         dispatch.forward(req, res);
                     }
                     else if (result instanceof String) {
                         out.println(result.toString());
                     } else {
-                        out.println("Erreur: Type de retour inconnu");
+                        throw new ServletException("Type de retour inconnu : " + result.getClass().getName());
                     }
                     out.println("Resultat de l'execution: " + result.toString());
 
                 } catch(Exception e){
                     e.printStackTrace(out);
                 }
+                urlExist = true;    
+                break;
             }
+            
+        }
+        if (!urlExist) {
+            out.println("Aucune methode n\\'est associee a l\\'url : " + url);
         }
     }
 
     
-    public HashMap getListeClasses(String packageName) throws Exception {
+    public HashMap getListeClasses(String packageName , Class<?> annotationClass) throws Exception {
         
         HashMap<String, Mapping> map = new HashMap<>();
 
+    try{
         String path = Thread.currentThread().getContextClassLoader().getResource(packageName.replace('.', '/')).getPath();
 
         String decodedPath = URLDecoder.decode(path, "UTF-8");
         File packageDir = new File(decodedPath);
- 
+        
+        if (!packageDir.exists()) {
+            throw new PackageNotFound("Le repertoire du package " + packageName + " n'existe pas.");
+        }
 
         File[] files = packageDir.listFiles();
         if (files != null) {
@@ -110,22 +128,32 @@ public class FrontController extends HttpServlet {
                 if (file.isFile() && file.getName().endsWith(".class")) {
                     String className = packageName + "." + file.getName().replace(".class", "");
                     Class<?> classe = Class.forName(className);
-                     for (Method method : classe.getDeclaredMethods()) {
+                    if (classe.isAnnotationPresent(annotationClass.asSubclass(java.lang.annotation.Annotation.class))) {
+                        for (Method method : classe.getDeclaredMethods()) {
+                            if (method.isAnnotationPresent(Get.class)) {
+                                Get annotation = method.getAnnotation(Get.class);
 
-                        if (method.isAnnotationPresent(Get.class)) {
-                            Get annotation = method.getAnnotation(Get.class);
-                            String nameClass = classe.getName();
-                            String annotationName = annotation.value();
-                            String methodeName = method.getName();
-                            map.put(annotationName, new Mapping(nameClass, methodeName));
+                                for(String key : map.keySet()){
+                                    if(annotation.value().equals(key))
+                                    throw new Exception("Duplicate url : " +annotation.value());
+                                }
 
-                            System.out.println("Méthode annotée : " + method.getName());
-                            System.out.println("Valeur de l'annotation : " + annotation.value());
+                                String nameClass = classe.getName();
+                                String annotationName = annotation.value();
+                                String methodeName = method.getName();
+                                map.put(annotationName, new Mapping(nameClass, methodeName));
+
+                                System.out.println("Méthode annotée : " + method.getName());
+                                System.out.println("Valeur de l'annotation : " + annotation.value());
+                            }
                         }
                     }
                 }
             }
         }
+    } catch (IOException e) {
+        throw new Exception("Package introuvable");
+    }
         return map;
     }
 }
