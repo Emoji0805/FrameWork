@@ -6,15 +6,18 @@ import java.io.PrintWriter;
 import java.lang.reflect.Method;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import javax.rmi.CORBA.Util;
-import javax.rmi.CORBA.Util;
+import java.util.Map;
+
 import annotation.*;
 import model.*;
 import javax.servlet.*;
 import javax.servlet.RequestDispatcher;
 import javax.servlet.http.*;
+import java.lang.reflect.Parameter;
+
 import Utils.*;
 import annotation.*;
 
@@ -49,9 +52,21 @@ public class FrontController extends HttpServlet {
 
     protected void processedRequest(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         res.setContentType("text/plain");
-        String url = req.getRequestURI();
+
         PrintWriter out = res.getWriter();
-        out.println("Youhouuu");
+       
+        // String requestURI = req.getRequestURI();
+        // String contextPath = req.getContextPath();
+        String url = req.getRequestURI();
+
+        // out.println("" + requestURI + " et " + ":" + contextPath);
+        // out.println(url);
+
+        // if (url.contains("?")) {
+        //     int index = url.indexOf("?");
+        //     String basePath = url.substring(0, index);
+        //     url = basePath;
+        // }  
 
         boolean urlExist = false;
         for(String cle : mapp.keySet()) {
@@ -64,10 +79,44 @@ public class FrontController extends HttpServlet {
                 try{
                     
                     Class<?> clazz = Class.forName(mapp.get(cle).getClassName());
+                    Method[]methods = clazz.getDeclaredMethods();
                     Object instance = clazz.getDeclaredConstructor().newInstance();
-                    Method method = clazz.getMethod(mapp.get(cle).getMethodeName());
+                    // Method method = clazz.getMethod(mapp.get(cle).getMethodeName());
+                    Method m = null;
+                    for (Method method : methods) {
+                        if (method.getName().equals(mapp.get(cle).getMethodeName())) {
+                            m = method;
+                        }
+                    }
 
-                    Object result = method.invoke(instance);
+                        
+                    Parameter[] params = m.getParameters();
+                    int methodParamCount = params.length;
+                    List<String> paramNames = Collections.list(req.getParameterNames());
+                    int requestParamCount = paramNames.size();
+                    if (methodParamCount != requestParamCount) {
+                        out.println("Error: The number of parameters sent (" + requestParamCount + ") does not match the number of parameters required by the method (" + methodParamCount + ").");
+                        return;
+                    }
+                    Object result;
+
+                    if (methodParamCount < 1) {
+                        result = m.invoke(instance);
+                    } else {
+                        Object[] paramValues = new Object[methodParamCount];
+                        for (int i = 0; i < params.length; i++) {
+                            String paramName = params[i].isAnnotationPresent(Param.class)
+                                ? params[i].getAnnotation(Param.class).value()
+                                : params[i].getName();
+    
+                            String paramValue = req.getParameter(paramName);
+                            paramValues[i] = Util.convertParameterValue(paramValue, params[i].getType());
+                        }
+                        result = m.invoke(instance, paramValues);
+                    }
+                    
+                    // Object[] parameterValues = Util.getParameterValues(req, method, Param.class);
+                    
 
                     if(result instanceof ModelView){
                         ModelView mv = (ModelView) result;
@@ -79,10 +128,14 @@ public class FrontController extends HttpServlet {
                             throw new ServletException("La page JSP " + targetUrl + " n'existe pas.");
                         }
                      
-                        HashMap<String, Object> data = mv.getData();
-                        for (String keyData : data.keySet()) {
-                            req.setAttribute(keyData, data.get(keyData));
-                        }
+                        // HashMap<String, Object> data = mv.getData();
+                        // for (String keyData : data.keySet()) {
+                        //     req.setAttribute(keyData, data.get(keyData));
+                        // }
+                            HashMap<String, Object> data = mv.getData();
+                            for (Map.Entry<String, Object> entry : data.entrySet()) {
+                                req.setAttribute(entry.getKey(), entry.getValue());
+                            }
 
                         RequestDispatcher dispatch = req.getRequestDispatcher(targetUrl);
                         dispatch.forward(req, res);
