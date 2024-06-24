@@ -1,27 +1,43 @@
 package Utils;
 
 import javax.servlet.http.HttpServletRequest;
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 import java.lang.reflect.Parameter;
 import annotation.*;
 
 public class Util {
     
-    public static Object[] getParameterValues(HttpServletRequest request, Method method, Class<Param> annotationClass) {
+    public static Object[] getParameterValues(HttpServletRequest request, Method method,
+            Class<Param> paramAnnotationClass, Class<ParamObject> paramObjectAnnotationClass) {
         Parameter[] parameters = method.getParameters();
         Object[] parameterValues = new Object[parameters.length];
+
         for (int i = 0; i < parameters.length; i++) {
-            String paramName;
-            if (parameters[i].isAnnotationPresent(annotationClass)) {
-                Param param = parameters[i].getAnnotation(annotationClass);
-                paramName = param.value();
-                System.out.println(paramName);
+            if (parameters[i].isAnnotationPresent(paramAnnotationClass)) {
+                Param param = parameters[i].getAnnotation(paramAnnotationClass);
+                String paramName = param.value();
+                String paramValue = request.getParameter(paramName);
+                parameterValues[i] = convertParameterValue(paramValue, parameters[i].getType());
+            } else if (parameters[i].isAnnotationPresent(paramObjectAnnotationClass)) {
+                ParamObject paramObject = parameters[i].getAnnotation(paramObjectAnnotationClass);
+                String objName = paramObject.objName();
+                try {
+                    Object paramObjectInstance = parameters[i].getType().getDeclaredConstructor().newInstance();
+                    Field[] fields = parameters[i].getType().getDeclaredFields();
+                    for (Field field : fields) {
+                        String fieldName = field.getName();
+                        String paramValue = request.getParameter(objName + "." + fieldName);
+                        field.setAccessible(true);
+                        field.set(paramObjectInstance, convertParameterValue(paramValue, field.getType()));
+                    }
+                    parameterValues[i] = paramObjectInstance;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    throw new RuntimeException("Failed to create and populate parameter object: " + e.getMessage());
+                }
             } else {
-                paramName = parameters[i].getName();
-                System.out.println(paramName);
+                throw new RuntimeException("Parameter name could not be determined for parameter index " + i);
             }
-            String paramValue = request.getParameter(paramName);
-            parameterValues[i] = convertParameterValue(paramValue, parameters[i].getType());
         }
         return parameterValues;
     }

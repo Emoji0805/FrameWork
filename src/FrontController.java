@@ -16,6 +16,8 @@ import model.*;
 import javax.servlet.*;
 import javax.servlet.RequestDispatcher;
 import javax.servlet.http.*;
+
+
 import java.lang.reflect.Parameter;
 
 import Utils.*;
@@ -79,44 +81,26 @@ public class FrontController extends HttpServlet {
                 try{
                     
                     Class<?> clazz = Class.forName(mapp.get(cle).getClassName());
-                    Method[]methods = clazz.getDeclaredMethods();
-                    Object instance = clazz.getDeclaredConstructor().newInstance();
+                    Method[] methods = clazz.getDeclaredMethods();
                     // Method method = clazz.getMethod(mapp.get(cle).getMethodeName());
                     Method m = null;
                     for (Method method : methods) {
                         if (method.getName().equals(mapp.get(cle).getMethodeName())) {
                             m = method;
+                            break;
                         }
                     }
 
-                        
-                    Parameter[] params = m.getParameters();
-                    int methodParamCount = params.length;
-                    List<String> paramNames = Collections.list(req.getParameterNames());
-                    int requestParamCount = paramNames.size();
-                    if (methodParamCount != requestParamCount) {
-                        out.println("Error: The number of parameters sent (" + requestParamCount + ") does not match the number of parameters required by the method (" + methodParamCount + ").");
-                        return;
+                    if (m == null) {
+                        throw new NoSuchMethodException(
+                                "Method " + mapp.get(cle).getMethodeName() + " not found in " + clazz.getName());
                     }
-                    Object result;
+       
+                    Object instance = clazz.getDeclaredConstructor().newInstance();
+                    Object[] parameterValues = Util.getParameterValues(req, m, Param.class,
+                            ParamObject.class);
 
-                    if (methodParamCount < 1) {
-                        result = m.invoke(instance);
-                    } else {
-                        Object[] paramValues = new Object[methodParamCount];
-                        for (int i = 0; i < params.length; i++) {
-                            String paramName = params[i].isAnnotationPresent(Param.class)
-                                ? params[i].getAnnotation(Param.class).value()
-                                : params[i].getName();
-    
-                            String paramValue = req.getParameter(paramName);
-                            paramValues[i] = Util.convertParameterValue(paramValue, params[i].getType());
-                        }
-                        result = m.invoke(instance, paramValues);
-                    }
-                    
-                    // Object[] parameterValues = Util.getParameterValues(req, method, Param.class);
-                    
+                    Object result = m.invoke(instance, parameterValues);
 
                     if(result instanceof ModelView){
                         ModelView mv = (ModelView) result;
