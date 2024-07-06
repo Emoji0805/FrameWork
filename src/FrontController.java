@@ -3,6 +3,7 @@ package controller;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URLDecoder;
 import java.util.ArrayList;
@@ -59,7 +60,7 @@ public class FrontController extends HttpServlet {
        
         // String requestURI = req.getRequestURI();
         // String contextPath = req.getContextPath();
-        String url = req.getRequestURI();
+        String url = req.getRequestURI().substring(req.getContextPath().length());
 
         // out.println("" + requestURI + " et " + ":" + contextPath);
         // out.println(url);
@@ -73,10 +74,10 @@ public class FrontController extends HttpServlet {
         boolean urlExist = false;
         for(String cle : mapp.keySet()) {
             if(cle.equals(url)) {
-                out.println("Cle : "+cle+"\n");
-                out.println("Url : "+url +"\n");
-                out.println("Methode associe : "+ mapp.get(cle).getMethodeName());
-                out.println("avec la class : "+ mapp.get(cle).getClassName());
+                // out.println("Cle : "+cle+"\n");
+                // out.println("Url : "+url +"\n");
+                // out.println("Methode associe : "+ mapp.get(cle).getMethodeName());
+                // out.println("avec la class : "+ mapp.get(cle).getClassName());
                 
                 try{
                     
@@ -100,17 +101,37 @@ public class FrontController extends HttpServlet {
                     Object[] parameterValues = Util.getParameterValues(req, m, Param.class,
                             ParamObject.class);
 
+                    Field sessionField = null;
+                    Field[] fields = clazz.getDeclaredFields();
+                    for (Field field : fields) {
+                        if (field.getType().equals(MySession.class)) {
+                            sessionField = field;
+                            break;
+                        }
+                    }
+                    if(sessionField != null) {
+                        sessionField.setAccessible(true);
+                        sessionField.set(instance , new MySession(req.getSession()));
+                    }
+                    
+                    for (int i = 0; i < parameterValues.length; i++) {
+                        if (parameterValues[i] == null && m.getParameterTypes()[i].equals(MySession.class)) {
+                            MySession session = new MySession(req.getSession());
+                            parameterValues[i] = session;
+                        }
+                    }
+
                     Object result = m.invoke(instance, parameterValues);
 
                     if(result instanceof ModelView){
                         ModelView mv = (ModelView) result;
-                        String targetUrl ="pages/" + mv.getUrl();
+                        String targetUrl = mv.getUrl();
                         ServletContext context = getServletContext();
                         String realPath = context.getRealPath(targetUrl);
 
-                        if (realPath == null || !new File(realPath).exists()) {
-                            throw new ServletException("La page JSP " + targetUrl + " n'existe pas.");
-                        }
+                        // if (realPath == null || !new File(realPath).exists()) {
+                        //     throw new ServletException("La page JSP " + targetUrl + " n'existe pas.");
+                        // }
                      
                         // HashMap<String, Object> data = mv.getData();
                         // for (String keyData : data.keySet()) {
@@ -132,6 +153,8 @@ public class FrontController extends HttpServlet {
                     out.println("Resultat de l'execution: " + result.toString());
 
                 } catch(Exception e){
+                    // out.println(e.getMessage());
+                   
                     e.printStackTrace(out);
                 }
                 urlExist = true;    

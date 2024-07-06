@@ -2,13 +2,13 @@ package Utils;
 
 import javax.servlet.http.HttpServletRequest;
 import java.lang.reflect.*;
-import java.lang.reflect.Parameter;
+
 import annotation.*;
 
 public class Util {
     
     public static Object[] getParameterValues(HttpServletRequest request, Method method,
-            Class<Param> paramAnnotationClass, Class<ParamObject> paramObjectAnnotationClass) {
+            Class<Param> paramAnnotationClass, Class<ParamObject> paramObjectAnnotationClass) throws Exception{
         Parameter[] parameters = method.getParameters();
         Object[] parameterValues = new Object[parameters.length];
 
@@ -36,7 +36,11 @@ public class Util {
                     throw new RuntimeException("Failed to create and populate parameter object: " + e.getMessage());
                 }
             } else {
-                throw new RuntimeException("Parameter name could not be determined for parameter index " + i);
+                // throw new Exception("ETU 2743");
+                String paramName = parameters[i].getName();
+                String paramValue = request.getParameter(paramName);
+                parameterValues[i] = convertParameterValue(paramValue,
+                        parameters[i].getType());
             }
         }
         return parameterValues;
