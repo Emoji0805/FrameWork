@@ -11,7 +11,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
+import com.google.gson.Gson;
 import annotation.*;
 import model.*;
 import javax.servlet.*;
@@ -43,6 +43,7 @@ public class FrontController extends HttpServlet {
             throw new ServletException(e.getMessage());
         }
     }
+    
 
     protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         processedRequest(req, res);
@@ -123,34 +124,52 @@ public class FrontController extends HttpServlet {
 
                     Object result = m.invoke(instance, parameterValues);
 
-                    if(result instanceof ModelView){
-                        ModelView mv = (ModelView) result;
-                        String targetUrl = mv.getUrl();
-                        ServletContext context = getServletContext();
-                        String realPath = context.getRealPath(targetUrl);
+                    
+                    if(m.isAnnotationPresent(ResponseBody.class)){
+                        if(result instanceof ModelView){
+                            res.setContentType("application/json");
+                            Gson gson = new Gson();
 
-                        // if (realPath == null || !new File(realPath).exists()) {
-                        //     throw new ServletException("La page JSP " + targetUrl + " n'existe pas.");
-                        // }
-                     
-                        // HashMap<String, Object> data = mv.getData();
-                        // for (String keyData : data.keySet()) {
-                        //     req.setAttribute(keyData, data.get(keyData));
-                        // }
+                            ModelView mv = (ModelView) result;
+                            String targetUrl = mv.getUrl();
                             HashMap<String, Object> data = mv.getData();
-                            for (Map.Entry<String, Object> entry : data.entrySet()) {
-                                req.setAttribute(entry.getKey(), entry.getValue());
-                            }
+                            String jsonModel = gson.toJson(data);
+                            out.println(jsonModel);
+                        }
+                        else{
+                            res.setContentType("application/json");
+                            Gson gson = new Gson();
+                            String jsonModel = gson.toJson(result);
+                            out.println(jsonModel);
+                        }
+                    }else if(result instanceof ModelView){
+                            ModelView mv = (ModelView) result;
+                            String targetUrl = mv.getUrl();
+                            ServletContext context = getServletContext();
+                            String realPath = context.getRealPath(targetUrl);
 
-                        RequestDispatcher dispatch = req.getRequestDispatcher(targetUrl);
-                        dispatch.forward(req, res);
-                    }
-                    else if (result instanceof String) {
-                        out.println(result.toString());
-                    } else {
-                        throw new ServletException("Type de retour inconnu : " + result.getClass().getName());
-                    }
-                    out.println("Resultat de l'execution: " + result.toString());
+                            // if (realPath == null || !new File(realPath).exists()) {
+                            //     throw new ServletException("La page JSP " + targetUrl + " n'existe pas.");
+                            // }
+                        
+                            // HashMap<String, Object> data = mv.getData();
+                            // for (String keyData : data.keySet()) {
+                            //     req.setAttribute(keyData, data.get(keyData));
+                            // }
+                                HashMap<String, Object> data = mv.getData();
+                                for (Map.Entry<String, Object> entry : data.entrySet()) {
+                                    req.setAttribute(entry.getKey(), entry.getValue());
+                                }
+
+                            RequestDispatcher dispatch = req.getRequestDispatcher(targetUrl);
+                            dispatch.forward(req, res);
+                        }
+                        else if (result instanceof String) {
+                            out.println(result.toString());
+                        } else {
+                            throw new ServletException("Type de retour inconnu : " + result.getClass().getName());
+                        }
+                        out.println("Resultat de l'execution: " + result.toString());
 
                 } catch(Exception e){
                     // out.println(e.getMessage());
