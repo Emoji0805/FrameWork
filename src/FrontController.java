@@ -61,7 +61,7 @@ public class FrontController extends HttpServlet {
        
         // String requestURI = req.getRequestURI();
         // String contextPath = req.getContextPath();
-        String url = req.getRequestURI().substring(req.getContextPath().length());
+        String url = req.getRequestURI();
 
         // out.println("" + requestURI + " et " + ":" + contextPath);
         // out.println(url);
@@ -79,23 +79,31 @@ public class FrontController extends HttpServlet {
                 // out.println("Url : "+url +"\n");
                 // out.println("Methode associe : "+ mapp.get(cle).getMethodeName());
                 // out.println("avec la class : "+ mapp.get(cle).getClassName());
-                
+                Mapping mapping = mapp.get(cle);
+
                 try{
                     
                     Class<?> clazz = Class.forName(mapp.get(cle).getClassName());
-                    Method[] methods = clazz.getDeclaredMethods();
+                    // Method[] methods = clazz.getDeclaredMethods();
+
                     // Method method = clazz.getMethod(mapp.get(cle).getMethodeName());
                     Method m = null;
-                    for (Method method : methods) {
-                        if (method.getName().equals(mapp.get(cle).getMethodeName())) {
-                            m = method;
+                    for (VerbAction action : mapping.getVerbactions()) {
+                        if (action.getVerb().equalsIgnoreCase(req.getMethod())) {
+                            Class<?> c = Class.forName(mapping.getClassName());
+                            Method[] methods = c.getDeclaredMethods();
+                            for (Method method : methods) {
+                                if (method.getName().equals(action.getMethodName())) {
+                                    m = method;
+                                    break;
+                                }
+                            }
                             break;
                         }
                     }
 
                     if (m == null) {
-                        throw new NoSuchMethodException(
-                                "Method " + mapp.get(cle).getMethodeName() + " not found in " + clazz.getName());
+                        throw new NoSuchMethodException("Method not found in class " + mapping.getClassName());
                     }
        
                     Object instance = clazz.getDeclaredConstructor().newInstance();
@@ -172,9 +180,10 @@ public class FrontController extends HttpServlet {
                         out.println("Resultat de l'execution: " + result.toString());
 
                 } catch(Exception e){
-                    // out.println(e.getMessage());
-                   
-                    e.printStackTrace(out);
+                    e.printStackTrace();
+                    req.setAttribute("error", e.getMessage());
+                    RequestDispatcher dispatch = req.getRequestDispatcher("pages/error.jsp");
+                    dispatch.forward(req, res);
                 }
                 urlExist = true;    
                 break;
@@ -182,7 +191,7 @@ public class FrontController extends HttpServlet {
             
         }
         if (!urlExist) {
-            out.println("Aucune methode n\\'est associee a l\\'url : " + url);
+            out.println("Error 404 - No method is associated with the URL: " + url);
         }
     }
 
@@ -209,18 +218,37 @@ public class FrontController extends HttpServlet {
                     Class<?> classe = Class.forName(className);
                     if (classe.isAnnotationPresent(annotationClass.asSubclass(java.lang.annotation.Annotation.class))) {
                         for (Method method : classe.getDeclaredMethods()) {
-                            if (method.isAnnotationPresent(Get.class)) {
-                                Get annotation = method.getAnnotation(Get.class);
+                            if (method.isAnnotationPresent(Url.class)) {
+                                Url annotation = method.getAnnotation(Url.class);
 
-                                for(String key : map.keySet()){
-                                    if(annotation.value().equals(key))
-                                    throw new Exception("Duplicate url : " +annotation.value());
+                                // for(String key : map.keySet()){
+                                //     if(annotation.value().equals(key))
+                                //     throw new Exception("Duplicate url : " +annotation.value());
+                                // }
+
+                                if(!map.containsKey(annotation.value())){
+                                    map.put(annotation.value(), new Mapping(classe.getName()));
                                 }
 
                                 String nameClass = classe.getName();
-                                String annotationName = annotation.value();
+                                String lien = annotation.value();
                                 String methodeName = method.getName();
-                                map.put(annotationName, new Mapping(nameClass, methodeName));
+
+                                boolean isGet = method.isAnnotationPresent(Get.class);
+                                boolean isPost = method.isAnnotationPresent(Post.class);
+
+                                if (!isGet && !isPost) {
+                                    isGet = true;
+                                }
+            
+                                String verb = null;
+                                if (isGet) {
+                                    verb="GET";
+                                }
+                                else{
+                                    verb="POST";
+                                }
+                                map.get(lien).addVerbAction(method.getName(), verb);
 
                                 System.out.println("Méthode annotée : " + method.getName());
                                 System.out.println("Valeur de l'annotation : " + annotation.value());
