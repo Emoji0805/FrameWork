@@ -17,12 +17,18 @@ import model.*;
 import javax.servlet.*;
 import javax.servlet.RequestDispatcher;
 import javax.servlet.http.*;
-
+import javax.servlet.http.Part;
 
 import java.lang.reflect.Parameter;
-
 import Utils.*;
 import annotation.*;
+import javax.servlet.annotation.MultipartConfig;
+
+@MultipartConfig(
+    fileSizeThreshold = 1024 * 1024 * 10,  // 10 MB
+    maxFileSize = 1024 * 1024 * 50,        // 50 MB
+    maxRequestSize = 1024 * 1024 * 100     // 100 MB
+)
 
 public class FrontController extends HttpServlet {
 
@@ -191,8 +197,7 @@ public class FrontController extends HttpServlet {
             
         }
         if (!urlExist) {
-            out.println("Error 404 - No method is associated with the URL: " + url + "\n");
-            out.println("L'url n'esxiste pas");
+            out.println("Error 404 - No method is associated with the URL: " + url);
         }
     }
 
