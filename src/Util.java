@@ -1,9 +1,10 @@
 package Utils;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.ServletException;
 import java.lang.reflect.*;
-
 import annotation.*;
+import javax.servlet.http.Part;
 
 public class Util {
     
@@ -14,10 +15,22 @@ public class Util {
 
         for (int i = 0; i < parameters.length; i++) {
             if (parameters[i].isAnnotationPresent(paramAnnotationClass)) {
-                Param param = parameters[i].getAnnotation(paramAnnotationClass);
-                String paramName = param.value();
-                String paramValue = request.getParameter(paramName);
-                parameterValues[i] = convertParameterValue(paramValue, parameters[i].getType());
+                if (request.getContentType() != null && request.getContentType().toLowerCase().startsWith("multipart/")) {
+                    Part filePart = request.getPart("file");
+                    if (filePart != null) {
+                        Fichier fichier = new Fichier(filePart);
+                        parameterValues[i] = fichier;
+                    } else {
+                        throw new ServletException("File part is missing.");
+                    }
+                }
+                else{
+                    Param param = parameters[i].getAnnotation(paramAnnotationClass);
+                    String paramName = param.value();
+                    String paramValue = request.getParameter(paramName);
+                    parameterValues[i] = convertParameterValue(paramValue, parameters[i].getType());
+                }
+               
             } else if (parameters[i].isAnnotationPresent(paramObjectAnnotationClass)) {
                 ParamObject paramObject = parameters[i].getAnnotation(paramObjectAnnotationClass);
                 String objName = paramObject.objName();
