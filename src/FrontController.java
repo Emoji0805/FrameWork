@@ -33,7 +33,7 @@ import javax.servlet.annotation.MultipartConfig;
 public class FrontController extends HttpServlet {
 
     HashMap<String, Mapping> mapp = new HashMap<>();
-
+    String coucou = "coucou";
     public void init() throws ServletException{
 
         try{
