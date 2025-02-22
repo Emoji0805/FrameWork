@@ -33,7 +33,7 @@ import javax.servlet.annotation.MultipartConfig;
 public class FrontController extends HttpServlet {
 
     HashMap<String, Mapping> mapp = new HashMap<>();
-    String coucou = "coucou";
+
     public void init() throws ServletException{
 
         try{
@@ -101,6 +101,7 @@ public class FrontController extends HttpServlet {
                             for (Method method : methods) {
                                 if (method.getName().equals(action.getMethodName())) {
                                     m = method;
+                                    System.out.println("La methode "+method.getName());
                                     break;
                                 }
                             }
@@ -113,7 +114,7 @@ public class FrontController extends HttpServlet {
                     }
        
                     Object instance = clazz.getDeclaredConstructor().newInstance();
-                    Object[] parameterValues = Util.getParameterValues(req, m, Param.class,
+                    Object[] parameterValues = Util.getParameterValues(req, res, m, Param.class,
                             ParamObject.class);
 
                     Field sessionField = null;

@@ -1,16 +1,28 @@
 package Utils;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.ServletException;
+import java.io.File;
 import java.lang.reflect.*;
+import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.List;
+
+import java.lang.reflect.*;
+import java.util.HashMap;
 import java.util.Map;
 import java.lang.Number;
 import annotation.*;
-import javax.servlet.http.Part;
+
+import javax.servlet.http.HttpServletRequest;
+
+
+import javax.servlet.http.*;
+import javax.servlet.*;
 
 public class Util {
     
-    public static Object[] getParameterValues(HttpServletRequest request, Method method,
+    public static Object[] getParameterValues(HttpServletRequest request, HttpServletResponse response, Method method,
             Class<Param> paramAnnotationClass, Class<ParamObject> paramObjectAnnotationClass) throws Exception{
         Parameter[] parameters = method.getParameters();
         Object[] parameterValues = new Object[parameters.length];
@@ -41,18 +53,45 @@ public class Util {
                 try {
                     Object paramObjectInstance = parameters[i].getType().getDeclaredConstructor().newInstance();
                     Field[] fields = parameters[i].getType().getDeclaredFields();
+
+                    Map<String, String> fieldsValues = new HashMap<>();
+                    Map<String, String> validationErrors = new HashMap<>();
+
                     for (Field field : fields) {
                         String fieldName = field.getName();
                         String paramValue = request.getParameter(objName + "." + fieldName);
-                        System.out.println(paramValue); 
-                        System.out.println(objName + "." + fieldName);
+                        
+                        fieldsValues.put(fieldName, paramValue);
+                        if (paramValue != null) {
+                            field.setAccessible(true);
+                            field.set(paramObjectInstance, convertParameterValue(paramValue, field.getType()));
+                        }
 
                         String key = objName + "." + fieldName;
-                        
-                        validateField(params, field, key);
-                        field.setAccessible(true);
-                        field.set(paramObjectInstance, convertParameterValue(paramValue, field.getType()));
                     }
+                    validationErrors = validateField(paramObjectInstance, params, objName);
+                    
+                    if (!validationErrors.isEmpty()) {
+                        request.setAttribute("errors", validationErrors);
+                        request.setAttribute("values", fieldsValues);
+                        
+                        isError iserr = method.getAnnotation(isError.class);
+                        if(iserr != null) { 
+                            String errUrl = iserr.url();
+                            HttpServletRequest wrappedRequest = new HttpServletRequestWrapper(request) {
+
+                                @Override
+                                public String getMethod() {
+                                    return "GET";
+                                }
+                            };
+                            RequestDispatcher dispatcher = request.getRequestDispatcher(errUrl);
+                            dispatcher.forward(wrappedRequest, response);
+                        }
+                        System.out.println("Validation errors for object: " + objName);
+                        throw new Exception("Validation errors: " + validationErrors);
+                    }
+
                     parameterValues[i] = paramObjectInstance;
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -69,66 +108,90 @@ public class Util {
         return parameterValues;
     }
 
-     public static void validateField(Map<String, String[]> params, Field field, String key) throws Exception {
-
-        if(field.isAnnotationPresent(Required.class)) {
-            if (params.get(key) == null || params.get(key)[0].isEmpty()) {
-                throw new Exception("The parameter " + key + " is required.");
-            }
-        }
-
-        if (field.isAnnotationPresent(Length.class)) {
-        if (params.get(key) != null) {
-            String value = params.get(key)[0].replace(" ", "");
-            Length length = field.getAnnotation(Length.class);
-
-            if (value.length() > length.value()) {
-                throw new Exception("Le parametre " + key + " ne doit pas depasser les " + length.value() + " caracteres.");
-            }
-        }
-    }
+     public static Map<String, String> validateField(Object obj , Map<String, String[]> params, String objName) throws Exception {
         
-        if (field.isAnnotationPresent(Numeric.class)) {
-            if (params.get(key) != null) {
-                try {
-                    Double.parseDouble(params.get(key)[0]);
-                } catch (Exception e) {
-                    throw new Exception("The parameter " + key + " must be a number.");
+        Map<String, String> errors =  new HashMap<>();
+        Field[] fields = obj.getClass().getDeclaredFields();
+
+        for(Field field : fields) {
+
+            field.setAccessible(true); 
+            String fieldName = field.getName();
+            String key = objName + "." + fieldName; 
+    
+            if (field.isAnnotationPresent(Required.class)) {
+                if (params.get(key) == null || params.get(key)[0].isEmpty()) {
+                    errors.put(fieldName, "Ce parametre est obligatoire.");   
+                    continue;  
                 }
             }
-        }
-        if (field.isAnnotationPresent(Range.class)) {
-            if (params.get(key) != null) {
-                try {
-                    double value = Double.parseDouble(params.get(key)[0]);
-                    Range range = field.getAnnotation(Range.class);
-                    if (value < range.min() || value > range.max()) {
-                        System.out.println("Ambany na ambony");
-                        throw new Exception("The parameter " + key + " must be within the range [" + range.min() + ", " + range.max() + "].");
+           
+    
+            if (field.isAnnotationPresent(Length.class)) {
+                if (params.get(key) != null ) {                 
+                        String valeur = params.get(key)[0].replace(" ", "");
+                        Length length = field.getAnnotation(Length.class);
+
+                        if (valeur.length() > length.value()) {
+                            errors.put(fieldName,"Ce paramètre ne doit pas dépasser " + length.value() + " caractères.");
+                            continue;
+                        }          
+                }
+            }
+            
+            if (field.isAnnotationPresent(Numeric.class)) {
+                if (params.get(key)!= null && !params.get(key)[0].isEmpty()) {                 
+                    try {                    
+                            Double.parseDouble(params.get(key)[0]);
+                    } catch (Exception e) {
+                        System.out.println(e.getMessage());
+                        errors.put(fieldName, "Ce parametre doit etre un nombre.");
+                        continue;
                     }
-                } catch (NumberFormatException e) {
-                    throw new Exception("The parameter " + key + " must be a number.");
                 }
-        
             }
-        }
+            if (field.isAnnotationPresent(Range.class)) {
+                if (params.get(key) != null) {
+                    try {
+                        double valeur = Double.parseDouble(params.get(key)[0]);
+                        Range range = field.getAnnotation(Range.class);
+                        if (valeur < range.min() || valeur > range.max()) {
+                            // System.out.println("Ambany na ambony");
+                            errors.put(fieldName, "Ce parametre doit etre entre [" + range.min() + " et " + range.max() + "].");
+                            continue;
+                            // throw new Exception("The parameter " + key + " must be within the range [" + range.min() + ", " + range.max() + "].");
+                        }
+                    } catch (NumberFormatException e) {
+                        errors.put(fieldName, "Ce parametre doit etre un nombre.");
+                        continue;
+                        // throw new Exception("The parameter " + key + " must be a number.");
+                    }
+            
+                }
+            }
 
+        }
+        return errors;
     }
+
+
     public static Object convertParameterValue(String value, Class<?> type) {
 
-        //  if (value == null || value.isEmpty()) { // Vérifiez aussi si la chaîne est vide
-        //     if (type.isPrimitive()) {
-        //         if (type == int.class) return 0; // Valeur par défaut pour les int manquants
-        //         if (type == boolean.class) return false;
-        //         if (type == long.class) return 0L;
-        //         if (type == double.class) return 0.0;
-        //         if (type == float.class) return 0.0f;
-        //         if (type == short.class) return (short) 0;
-        //         if (type == byte.class) return (byte) 0;
-        //         if (type == char.class) return '\u0000';
-        //     }
-        //     return null;
-        // }
+        if (value == null || value.isEmpty()) {
+            if (type.isPrimitive()) {
+                // Retourner la valeur par défaut pour les types primitifs
+                if (type == int.class) return 0;
+                if (type == boolean.class) return false;
+                if (type == long.class) return 0L;
+                if (type == double.class) return 0.0;
+                if (type == float.class) return 0.0f;
+                if (type == short.class) return (short) 0;
+                if (type == byte.class) return (byte) 0;
+                if (type == char.class) return '\u0000';
+            }
+            // Retourner null pour les types objets
+            return null;
+        }
 
         if (type == String.class) {
             return value;
@@ -154,4 +217,29 @@ public class Util {
         }
         return null;
     }
+
+    
+    private static boolean isEmpty(Object value) {
+        if (value == null) {
+            return true;
+        }
+        if (value instanceof String) {
+            return ((String) value).isEmpty();
+        }
+        if (value instanceof Map) {
+            return ((Map<?, ?>) value).isEmpty();
+        }
+        if (value.getClass().isArray()) {
+            return Array.getLength(value) == 0;
+        }
+        if (value instanceof Integer) {
+            return ((Integer) value) == 0; 
+        }
+        return false;
+    }
+
+
 }
+
+
+
