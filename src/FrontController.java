@@ -13,11 +13,10 @@ import java.util.List;
 import java.util.Map;
 import com.google.gson.Gson;
 import annotation.*;
-import model.*;
+
 import javax.servlet.*;
 import javax.servlet.RequestDispatcher;
 import javax.servlet.http.*;
-import javax.servlet.http.Part;
 
 import java.lang.reflect.Parameter;
 import Utils.*;
@@ -33,11 +32,15 @@ import javax.servlet.annotation.MultipartConfig;
 public class FrontController extends HttpServlet {
 
     HashMap<String, Mapping> mapp = new HashMap<>();
+    private String authValue;
+    private String roleValue;
 
     public void init() throws ServletException{
 
         try{
             String packageToScan = getInitParameter("package_name");
+            this.authValue = this.getInitParameter("authName");
+            this.roleValue = this.getInitParameter("roleName"); 
             mapp = getListeClasses(packageToScan , ControllerAnnotation.class);
        
         } catch (PackageNotFound e) {
@@ -67,7 +70,7 @@ public class FrontController extends HttpServlet {
        
         // String requestURI = req.getRequestURI();
         // String contextPath = req.getContextPath();
-        String url = req.getRequestURI();
+        String url = req.getRequestURI().substring(req.getContextPath().length());
 
         // out.println("" + requestURI + " et " + ":" + contextPath);
         // out.println(url);
@@ -110,8 +113,25 @@ public class FrontController extends HttpServlet {
                     }
 
                     if (m == null) {
-                        throw new NoSuchMethodException("Method not found in class " + mapping.getClassName());
+                    res.sendError(HttpServletResponse.SC_BAD_REQUEST,
+                            "Method not found in class: " + clazz.getName());
+                    return;
                     }
+                    if (m.isAnnotationPresent(Auth.class)) {
+                        if (req.getSession(false).getAttribute(this.authValue) == null) {
+                            res.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized action " + url);
+                            return;
+                        }
+                    }
+                    if (m.isAnnotationPresent(Profil.class)) {
+                        Profil role = m.getAnnotation(Profil.class);
+                        String roleName = role.value();
+                        if (!req.getSession(false).getAttribute(this.roleValue).equals(roleName)) {
+                            res.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized action " + url);
+                            return;
+                        }
+                    }
+
        
                     Object instance = clazz.getDeclaredConstructor().newInstance();
                     Object[] parameterValues = Util.getParameterValues(req, res, m, Param.class,
